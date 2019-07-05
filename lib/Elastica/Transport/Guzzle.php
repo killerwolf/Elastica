@@ -32,9 +32,9 @@ class Guzzle extends AbstractTransport
     /**
      * Curl resource to reuse.
      *
-     * @var Client Guzzle client to reuse
+     * @var Client[] Guzzle client to reuse
      */
-    protected static $_guzzleClientConnection;
+    protected static $_guzzleClientConnection = [];
 
     /**
      * Makes calls to the elasticsearch server.
@@ -158,8 +158,9 @@ class Guzzle extends AbstractTransport
      */
     protected function _getGuzzleClient($baseUrl, $persistent = true, Request $request)
     {
-        if (!$persistent || !self::$_guzzleClientConnection) {
-            self::$_guzzleClientConnection = new Client([
+        $hash = md5($baseUrl.$request->getContentType());
+        if (!$persistent || !array_key_exists($hash,self::$_guzzleClientConnection)) {
+            self::$_guzzleClientConnection[$hash] = new Client([
                 'base_uri' => $baseUrl,
                 'headers' => [
                     'Content-Type' => $request->getContentType(),
@@ -167,7 +168,7 @@ class Guzzle extends AbstractTransport
             ]);
         }
 
-        return self::$_guzzleClientConnection;
+        return self::$_guzzleClientConnection[$hash];
     }
 
     /**
