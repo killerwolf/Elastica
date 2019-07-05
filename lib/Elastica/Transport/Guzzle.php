@@ -32,9 +32,9 @@ class Guzzle extends AbstractTransport
     /**
      * Curl resource to reuse.
      *
-     * @var Client[] Guzzle client to reuse
+     * @var Client Guzzle client to reuse
      */
-    protected static $_guzzleClientConnection = [];
+    protected static $_guzzleClientConnection;
 
     /**
      * Makes calls to the elasticsearch server.
@@ -50,13 +50,17 @@ class Guzzle extends AbstractTransport
      *
      * @return \Elastica\Response Response object
      */
-    public function exec(Request $request, array $params)
+    public function exec(Request $request, array $params): Response
     {
         $connection = $this->getConnection();
 
-        $client = $this->_getGuzzleClient($this->_getBaseUrl($connection), $connection->isPersistent(), $request);
+        $client = $this->_getGuzzleClient($connection->isPersistent());
 
         $options = [
+            'base_uri' => $this->_getBaseUrl($connection),
+            'headers' => [
+                'Content-Type' => $request->getContentType(),
+            ],
             'exceptions' => false, // 4xx and 5xx is expected and NOT an exceptions in this context
         ];
         if ($connection->getTimeout()) {
@@ -66,20 +70,20 @@ class Guzzle extends AbstractTransport
         $proxy = $connection->getProxy();
 
         // See: https://github.com/facebook/hhvm/issues/4875
-        if (is_null($proxy) && defined('HHVM_VERSION')) {
-            $proxy = getenv('http_proxy') ?: null;
+        if (\is_null($proxy) && \defined('HHVM_VERSION')) {
+            $proxy = \getenv('http_proxy') ?: null;
         }
 
-        if (!is_null($proxy)) {
+        if (!\is_null($proxy)) {
             $options['proxy'] = $proxy;
         }
 
         $req = $this->_createPsr7Request($request, $connection);
 
         try {
-            $start = microtime(true);
+            $start = \microtime(true);
             $res = $client->send($req, $options);
-            $end = microtime(true);
+            $end = \microtime(true);
         } catch (TransferException $ex) {
             throw new GuzzleException($ex, $request, new Response($ex->getMessage()));
         }
@@ -120,7 +124,7 @@ class Guzzle extends AbstractTransport
         $req = new Psr7\Request(
             $request->getMethod(),
             $this->_getActionPath($request),
-            $connection->hasConfig('headers') && is_array($connection->getConfig('headers'))
+            $connection->hasConfig('headers') && \is_array($connection->getConfig('headers'))
                 ? $connection->getConfig('headers')
                 : []
         );
@@ -137,7 +141,7 @@ class Guzzle extends AbstractTransport
             }
 
             $req = $req->withBody(
-                Psr7\stream_for(is_array($data)
+                Psr7\stream_for(\is_array($data)
                     ? JSON::stringify($data, JSON_UNESCAPED_UNICODE)
                     : $data
                 )
@@ -150,35 +154,27 @@ class Guzzle extends AbstractTransport
     /**
      * Return Guzzle resource.
      *
-     * @param string  $baseUrl
-     * @param bool    $persistent False if not persistent connection
-     * @param Request $request    Elastica Request Object
+     * @param bool $persistent False if not persistent connection
      *
      * @return Client
      */
-    protected function _getGuzzleClient($baseUrl, $persistent = true, Request $request)
+    protected function _getGuzzleClient(bool $persistent = true): Client
     {
-        $hash = md5($baseUrl.$request->getContentType());
-        if (!$persistent || !array_key_exists($hash,self::$_guzzleClientConnection)) {
-            self::$_guzzleClientConnection[$hash] = new Client([
-                'base_uri' => $baseUrl,
-                'headers' => [
-                    'Content-Type' => $request->getContentType(),
-                ],
-            ]);
+        if (!$persistent || !self::$_guzzleClientConnection) {
+            self::$_guzzleClientConnection = new Client();
         }
 
-        return self::$_guzzleClientConnection[$hash];
+        return self::$_guzzleClientConnection;
     }
 
     /**
      * Builds the base url for the guzzle connection.
      *
-     * @param \Elastica\Connection $connection
+     * @param Connection $connection
      *
      * @return string
      */
-    protected function _getBaseUrl(Connection $connection)
+    protected function _getBaseUrl(Connection $connection): string
     {
         // If url is set, url is taken. Otherwise port, host and path
         $url = $connection->hasConfig('url') ? $connection->getConfig('url') : '';
@@ -190,25 +186,25 @@ class Guzzle extends AbstractTransport
                 'scheme' => $this->_scheme,
                 'host' => $connection->getHost(),
                 'port' => $connection->getPort(),
-                'path' => ltrim('/', $connection->getPath()),
+                'path' => \ltrim('/', $connection->getPath()),
             ]);
         }
 
-        return rtrim($baseUri, '/');
+        return \rtrim($baseUri, '/');
     }
 
     /**
      * Builds the action path url for each request.
      *
-     * @param \Elastica\Request $request
+     * @param Request $request
      *
      * @return string
      */
-    protected function _getActionPath(Request $request)
+    protected function _getActionPath(Request $request): string
     {
         $action = $request->getPath();
         if ($action) {
-            $action = '/'.ltrim($action, '/');
+            $action = '/'.\ltrim($action, '/');
         }
 
         if (!Util::isDateMathEscaped($action)) {
@@ -218,7 +214,7 @@ class Guzzle extends AbstractTransport
         $query = $request->getQuery();
 
         if (!empty($query)) {
-            $action .= '?'.http_build_query(
+            $action .= '?'.\http_build_query(
                 $this->sanityzeQueryStringBool($query)
                 );
         }
